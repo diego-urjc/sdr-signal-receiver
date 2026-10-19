@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+dump1090/
+# third-party files (own licenses): link, don't upload
+data/*.wav
+data/*.bin
+data/*.iq
