@@ -1,4 +1,4 @@
-﻿# 📡 Software-Defined Radio: Signal Reception and Analysis
+﻿#  Software-Defined Radio: Signal Reception and Analysis
 
 Simulation and analysis of radio signals with **GNU Radio** and **Python**, entirely in software and without hardware: a wideband FM chain with an SNR sweep, demodulation of a multi-station IQ recording, and ADS-B aircraft decoding with a custom demodulator written from scratch.
 
