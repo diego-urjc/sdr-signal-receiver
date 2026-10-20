@@ -1,23 +1,13 @@
 #!/usr/bin/env python3
-"""Simulated WBFM chain with an SNR sweep (GNU Radio + SciPy).
-
-Outputs:
-  data/fm_snr_sweep.csv      snr_in_db,snr_audio_db
-  figures/fm_snr_sweep.png   audio SNR versus input SNR
-  figures/fm_psd_clean.png   PSD of the clean FM signal and its bandwidth (Carson)
-"""
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
+import csv
 import matplotlib.pyplot as plt
 from gnuradio import gr, blocks, analog
 from scipy.signal import correlate, welch
 
 AR, QR = 48_000, 240_000
-SNRS_DB = [40, 30, 20, 15, 12, 10, 8, 6, 4, 2, 0]
 t = np.arange(AR * 5) / AR
 audio = 0.3*np.sin(2*np.pi*440*t) + 0.3*np.sin(2*np.pi*1000*t) + 0.2*np.sin(2*np.pi*3000*t)
-
 
 class FmSim(gr.top_block):
     def __init__(self, noise_amp):
@@ -34,7 +24,6 @@ class FmSim(gr.top_block):
         self.connect(noise, head, (add, 1)); self.connect(head, self.nz)
         self.connect(add, rx, self.out)
 
-
 def audio_snr(ref, rec):
     n = min(len(ref), len(rec)); ref, rec = ref[:n], rec[:n]
     d = np.argmax(correlate(rec, ref, mode='full', method='fft')) - (n - 1)
@@ -44,48 +33,63 @@ def audio_snr(ref, rec):
     g = np.dot(rec, ref) / np.dot(rec, rec)
     return 10*np.log10(np.sum(ref**2) / np.sum((ref - g*rec)**2))
 
-
-def sweep():
-    rows, clean = [], None
-    for snr in SNRS_DB:
-        tb = FmSim(10 ** (-snr / 20)); tb.run()
+if __name__ == '__main__':
+    snr_in_list = []
+    snr_out_list = []
+    
+    print("Calculando barrido de SNR...")
+    print("SNR_In,SNR_Out")
+    
+    # Lista de valores de SNR corregida para el barrido
+    valores_snr = [40, 30, 20, 15, 12, 10, 8, 6, 4, 2, 0]
+    
+    # Ejecución del barrido
+    for snr in valores_snr:
+        tb = FmSim(10 ** (-snr / 20))
+        tb.run()
         clean, nz = np.array(tb.clean.data()), np.array(tb.nz.data())
         snr_in = 10*np.log10(np.mean(abs(clean)**2) / np.mean(abs(nz)**2))
         snr_out = audio_snr(audio, np.array(tb.out.data()))
+        
         print(f"{snr_in:.1f},{snr_out:.1f}")
-        rows.append((snr_in, snr_out))
-    return np.array(rows), clean
+        snr_in_list.append(snr_in)
+        snr_out_list.append(snr_out)
+        
+        # Guardamos la última señal limpia para el Paso 4 (usando la de SNR alta)
+        if snr == 40:
+            clean_signal_saved = clean
 
+    # --- PASO 3: Guardar como CSV ---
+    with open('resultados_snr.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['SNR_Input', 'SNR_Audio'])
+        writer.writerows(zip(snr_in_list, snr_out_list))
+    print("\n[✓] Archivo 'resultados_snr.csv' guardado con éxito.")
 
-def plot_sweep(rows):
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(rows[:, 0], rows[:, 1], 'o-')
-    ax.set_xlabel('Input SNR (dB)'); ax.set_ylabel('Audio SNR (dB)')
-    ax.set_title('Wideband FM: audio SNR versus input SNR')
-    ax.grid(True, alpha=.3)
-    fig.tight_layout(); fig.savefig('figures/fm_snr_sweep.png', dpi=150)
+    # --- PASO 3: Generar Gráfica del Efecto Umbral ---
+    plt.figure(figsize=(8, 5))
+    plt.plot(snr_in_list, snr_out_list, 'o-', color='blue', label='Curva de Demodulación FM')
+    plt.grid(True, linestyle='--')
+    plt.xlabel('SNR de Entrada (RF / Canal) [dB]')
+    plt.ylabel('SNR de Audio (Salida Demodulada) [dB]')
+    plt.title('Efecto Umbral en Modulación FM (Curva SNR)')
+    plt.gca().invert_xaxis() # Invertimos para ver el decaimiento de izquierda a derecha (de 40 a 0 dB)
+    plt.savefig('grafica_efecto_umbral.png')
+    print("[✓] Gráfica 'grafica_efecto_umbral.png' guardada con éxito.")
 
+    # --- PASO 4: Cálculo de la Densidad Espectral (Welch) y Regla de Carson ---
+    f_axis, psd = welch(clean_signal_saved, fs=QR, nperseg=1024, return_onesided=False)
+    
+    # Centramos las frecuencias (FFTShift equivalente para Welch)
+    f_axis = np.fft.fftshift(f_axis)
+    psd = np.fft.fftshift(psd)
+    
+    plt.figure(figsize=(8, 4))
+    plt.plot(f_axis / 1e3, 10*np.log10(psd), color='green')
+    plt.grid(True, linestyle='--')
+    plt.xlabel('Frecuencia [kHz]')
+    plt.ylabel('Densidad Espectral de Potencia [dB/Hz]')
+    plt.title('Espectro de la Señal FM Limpia (Verificación Regla de Carson)')
+    plt.savefig('espectro_carson.png')
+    print("[✓] Gráfica de espectro 'espectro_carson.png' guardada con éxito.")
 
-def plot_psd(clean):
-    f, p = welch(clean, fs=QR, nperseg=4096, return_onesided=False)
-    f, p = np.fft.fftshift(f), np.fft.fftshift(p)
-    pdb = 10*np.log10(p / p.max())
-    # bandwidth at -20 dB as an estimate of the occupied bandwidth
-    inside = f[pdb > -20]
-    bw = inside.max() - inside.min()
-    print(f"Bandwidth at -20 dB: {bw/1e3:.0f} kHz (Carson: 180 kHz)")
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(f/1e3, pdb)
-    ax.axvline(-90, ls='--', c='gray'); ax.axvline(90, ls='--', c='gray', label='Carson ±90 kHz')
-    ax.set_xlabel('Frequency (kHz)'); ax.set_ylabel('PSD (dB rel.)'); ax.set_ylim(-80, 3)
-    ax.set_title(f'PSD of the clean FM signal (-20 dB bandwidth ≈ {bw/1e3:.0f} kHz)')
-    ax.legend(); ax.grid(True, alpha=.3)
-    fig.tight_layout(); fig.savefig('figures/fm_psd_clean.png', dpi=150)
-
-
-if __name__ == '__main__':
-    rows, clean = sweep()
-    np.savetxt('data/fm_snr_sweep.csv', rows, delimiter=',', fmt='%.2f',
-               header='snr_in_db,snr_audio_db', comments='')
-    plot_sweep(rows)
-    plot_psd(clean)
