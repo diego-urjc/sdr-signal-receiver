@@ -4,6 +4,7 @@
 Usage: python adsb_demod.py data/modes1.bin data/frames.txt
 uint8 IQ at 2 Msps: 1 bit = 2 samples, preamble = 16 samples (pulses at 0, 2, 7, 9).
 """
+import os
 import sys
 import numpy as np
 
@@ -60,6 +61,11 @@ if __name__ == '__main__':
     binf = sys.argv[1] if len(sys.argv) > 1 else 'data/modes1.bin'
     ref = sys.argv[2] if len(sys.argv) > 2 else 'data/frames.txt'
     mine = demodulate(binf)
+    with open('data/frames_custom.txt', 'w') as f:
+        f.writelines(f'*{m};\n' for m in mine)
+    if not os.path.exists(ref):
+        print(f"Custom:    {len(mine)} frames ({len(set(mine))} unique) -> data/frames_custom.txt")
+        sys.exit(f"{ref} not found: run dump1090 first to compare")
     # DF17/18 only (CRC=0 without applying the address mask); dump1090 also returns other DFs
     ref_all = load_reference(ref)
     ref_df17 = [m for m in ref_all if (int(m[:2], 16) >> 3) in (17, 18)]
@@ -68,5 +74,3 @@ if __name__ == '__main__':
     print(f"dump1090:  {len(ref_df17)} DF17/18 frames ({len(s_ref)} unique, of {len(ref_all)} total)")
     print(f"Matching:  {len(s_mine & s_ref)}")
     print(f"Custom only: {len(s_mine - s_ref)}   dump1090 only: {len(s_ref - s_mine)}")
-    with open('data/frames_custom.txt', 'w') as f:
-        f.writelines(f'*{m};\n' for m in mine)

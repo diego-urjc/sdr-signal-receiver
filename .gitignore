@@ -5,3 +5,4 @@ dump1090/
 data/*.wav
 data/*.bin
 data/*.iq
+data/*.cf32

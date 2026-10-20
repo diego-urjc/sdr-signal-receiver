@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
+import os
 import numpy as np
 import csv
 import matplotlib.pyplot as plt
@@ -34,6 +35,7 @@ def audio_snr(ref, rec):
     return 10*np.log10(np.sum(ref**2) / np.sum((ref - g*rec)**2))
 
 if __name__ == '__main__':
+    os.makedirs('data', exist_ok=True); os.makedirs('figures', exist_ok=True)
     snr_in_list = []
     snr_out_list = []
     
@@ -60,22 +62,22 @@ if __name__ == '__main__':
             clean_signal_saved = clean
 
     # --- PASO 3: Guardar como CSV ---
-    with open('resultados_snr.csv', 'w', newline='') as f:
+    with open('data/fm_snr_sweep.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['SNR_Input', 'SNR_Audio'])
         writer.writerows(zip(snr_in_list, snr_out_list))
-    print("\n[✓] Archivo 'resultados_snr.csv' guardado con éxito.")
+    print("\n[✓] Archivo 'data/fm_snr_sweep.csv' guardado con éxito.")
 
     # --- PASO 3: Generar Gráfica del Efecto Umbral ---
     plt.figure(figsize=(8, 5))
-    plt.plot(snr_in_list, snr_out_list, 'o-', color='blue', label='Curva de Demodulación FM')
+    plt.plot(snr_in_list, snr_out_list, 'o-', color='blue', label='FM demodulation curve')
     plt.grid(True, linestyle='--')
-    plt.xlabel('SNR de Entrada (RF / Canal) [dB]')
-    plt.ylabel('SNR de Audio (Salida Demodulada) [dB]')
-    plt.title('Efecto Umbral en Modulación FM (Curva SNR)')
+    plt.xlabel('Input SNR (RF / channel) [dB]')
+    plt.ylabel('Audio SNR (demodulated output) [dB]')
+    plt.title('FM threshold effect (SNR curve)')
     plt.gca().invert_xaxis() # Invertimos para ver el decaimiento de izquierda a derecha (de 40 a 0 dB)
-    plt.savefig('grafica_efecto_umbral.png')
-    print("[✓] Gráfica 'grafica_efecto_umbral.png' guardada con éxito.")
+    plt.savefig('figures/fm_threshold.png')
+    print("[✓] Gráfica 'figures/fm_threshold.png' guardada con éxito.")
 
     # --- PASO 4: Cálculo de la Densidad Espectral (Welch) y Regla de Carson ---
     f_axis, psd = welch(clean_signal_saved, fs=QR, nperseg=1024, return_onesided=False)
@@ -87,9 +89,11 @@ if __name__ == '__main__':
     plt.figure(figsize=(8, 4))
     plt.plot(f_axis / 1e3, 10*np.log10(psd), color='green')
     plt.grid(True, linestyle='--')
-    plt.xlabel('Frecuencia [kHz]')
-    plt.ylabel('Densidad Espectral de Potencia [dB/Hz]')
-    plt.title('Espectro de la Señal FM Limpia (Verificación Regla de Carson)')
-    plt.savefig('espectro_carson.png')
-    print("[✓] Gráfica de espectro 'espectro_carson.png' guardada con éxito.")
+    plt.xlabel('Frequency [kHz]')
+    plt.ylabel('Power spectral density [dB/Hz]')
+    plt.title('Clean FM signal spectrum (Carson's rule check)')
+    plt.savefig('figures/fm_carson_psd.png')
+    print("[✓] Gráfica de espectro 'figures/fm_carson_psd.png' guardada con éxito.")
+
+
 
